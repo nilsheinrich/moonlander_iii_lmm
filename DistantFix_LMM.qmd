@@ -304,7 +304,7 @@ ridgeplot(samples; show_intercept=false, xlabel="Bootstrap density and 95%CI", t
 #| label: m_varyingInt1
 
 m_varyingInt1 = let
-    formula = @formula(1/distance_to_spaceship ~ 1 + N_visible_obstacles + input_noise + (1 | ID));
+    formula = @formula(1/sqrt(distance_to_spaceship) ~ 1 + N_visible_obstacles + input_noise + (1 | ID));
     fit(MixedModel, formula, my_data; contrasts=my_cake);
   end
 
@@ -319,7 +319,7 @@ starting with the most complex model.
 #| label: m_varyingSlope_complex
 
 m_varyingSlope_complex = let
-    formula = @formula(1/distance_to_spaceship ~ 1 + N_visible_obstacles + input_noise + (1 + N_visible_obstacles + input_noise | ID));
+    formula = @formula(1/sqrt(distance_to_spaceship) ~ 1 + N_visible_obstacles + input_noise + (1 + N_visible_obstacles + input_noise | ID));
     fit(MixedModel, formula, my_data; contrasts=my_cake);
   end
 
@@ -333,7 +333,7 @@ Stating zero correlation between random effects
 #| label: m_varyingSlope_complex_zc
 
 m_varyingSlope_complex_zc = let
-    formula = @formula(1/distance_to_spaceship ~ 1 + N_visible_obstacles + input_noise 
+    formula = @formula(1/sqrt(distance_to_spaceship) ~ 1 + N_visible_obstacles + input_noise 
     + zerocorr(1 + N_visible_obstacles + input_noise | ID));
     fit(MixedModel, formula, my_data; contrasts=my_cake);
   end
@@ -361,7 +361,7 @@ gof_summary = let
   )
 end
 ```
-Close but, zero correlation is favored by BIC (and by AIC). Therefore. proceeding with m_varyingSlope_complex_zc.
+zero correlation is favored by BIC (and by AIC). Therefore. proceeding with m_varyingSlope_complex_zc.
 
 ### Deleting individual random effects
 
@@ -370,7 +370,7 @@ Deleting input noise
 #| label: m_varyingSlope1
 
 m_varyingSlope1 = let
-    formula = @formula(1/distance_to_spaceship ~ 1 + N_visible_obstacles + input_noise 
+    formula = @formula(1/sqrt(distance_to_spaceship) ~ 1 + N_visible_obstacles + input_noise 
     + (1 + N_visible_obstacles | ID));
     fit(MixedModel, formula, my_data; contrasts=my_cake);
   end
@@ -405,7 +405,7 @@ Kicking N_visible_obstacles out.
 #| label: m_varyingSlope2
 
 m_varyingSlope2 = let
-    formula = @formula(1/distance_to_spaceship ~ 1 + N_visible_obstacles + input_noise 
+    formula = @formula(1/sqrt(distance_to_spaceship) ~ 1 + N_visible_obstacles + input_noise 
     + (1 + input_noise | ID));
     fit(MixedModel, formula, my_data; contrasts=my_cake);
   end
@@ -441,7 +441,7 @@ N_visible_drift_tiles can also be kept as random effect. We will refer to m_vary
 #| label: selected model
 
 m_varyingSlope_complex_zc = let
-    formula = @formula(1/distance_to_spaceship ~ 1 + N_visible_obstacles + input_noise 
+    formula = @formula(1/sqrt(distance_to_spaceship) ~ 1 + N_visible_obstacles + input_noise 
     + zerocorr(1 + N_visible_obstacles + input_noise | ID));
     fit(MixedModel, formula, my_data; contrasts=my_cake);
   end
@@ -494,7 +494,7 @@ Now let's plot the bounds (without intercept) to visualize when 0 is within the 
 ridgeplot(samples; show_intercept=false, xlabel="Bootstrap density and 95%CI", title="Distance to agent (distant fixations)")
 ```
 
-We find **no** significance for input noise. We however find that **N_visible_obstacles** is significantly **increaing** distance to the spaceship within distant fixations (0.000833239, 0.00210256).
+We find **no** significance for input noise. We however find that **N_visible_obstacles** is significantly **increaing** distance to the spaceship within distant fixations (0.00119524, 0.00300704).
 
 # Modeling fixation location - distance to closest obstacle
 Controlling for the number of visible obstacles.
