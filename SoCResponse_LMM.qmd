@@ -24,7 +24,6 @@ Covariates (continuous variables):
     (- trials_since_last_crash)
     (- crashed_in_last_trial)
     - N_fixations
-    - N_saccades
 Fixed Effects (categorical variables):
     - done
     - level_difficulty
@@ -402,5 +401,5 @@ ridgeplot(samples; show_intercept=false, xlabel="Bootstrap density and 95%CI", t
 
 **Discussing the results:** We find significant effects for (stating 95% CIs):
 
-### with N_fixations & N_saccades:
+### with N_fixations:
 - input_noise (-1.05016, -0.637036)

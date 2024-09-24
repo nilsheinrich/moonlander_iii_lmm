@@ -56,7 +56,7 @@ Possible random effects: only **ID** (the subject itself).
 ```{julia}
 #| label: data
 
-my_data = DataFrame(Arrow.Table("data/Experiment3_CloseFixations.arrow"))
+my_data = DataFrame(Arrow.Table("data/Experiment3_CloseFixations_short.arrow"))
 my_data = dropmissing(my_data, [:N_visible_obstacles])
 
 # Filtering fixations with duration less than 25 samples
@@ -73,13 +73,18 @@ We will declare **ID** as a grouping variable as well as define the effects codi
 #### Hypothesis Coding
 ```{julia}
 
-#my_cake = Dict(
-#  :ID => Grouping(),
-#  :input_noise => SeqDiffCoding(),
-#);
-
 my_cake = Dict(
   :ID => Grouping(),
+  :input_noise => HypothesisCoding(
+    [
+      -1 +1 0 0 0
+      0 -1 +1 0 0
+      0 0 -1 +1 0
+      0 0 0 -1 +1
+    ];
+    levels=[0.0, 0.5, 1.0, 1.5, 2.0],
+    labels=["0.5", "1.0", "1.5", "2.0"],
+  ),
 );
 
 ```
@@ -206,13 +211,13 @@ Finally taking a look at the main effects within m_varyingSlope1:
 ```{julia}
 #| label: m_varyingSlope1
 
-m_varyingSlope1 = let
+m_varyingSlope_complex_zc = let
     varSlop = @formula(log(fixation_duration) ~ 1 + N_visible_obstacles + input_noise 
-    + zerocorr(1 + N_visible_obstacles | ID));
+    + zerocorr(1 + N_visible_obstacles + input_noise | ID));
     fit(MixedModel, varSlop, my_data; contrasts=my_cake);
   end
 
-issingular(m_varyingSlope1)  # NOT overparameterized
+m_varyingSlope_complex_zc
 
 ```
 
@@ -273,9 +278,20 @@ Now let's plot the bounds (without intercept) to visualize when 0 is within the 
 ```{julia}
 ridgeplot(samples; show_intercept=false, xlabel="Bootstrap density and 95%CI", title="Fixation duration (close fixations)")
 ```
-We see significance for ony one of the variables (effect on the fixation duration in close fixations).
 
-**input_noise** has a decreasing linear effect on fixation duration in close fixations (-0.066051, -0.0126895)
+Main effects:
+N_visible_obstacles   0.00665102  0.00579172   1.15    0.2508
+input_noise: 0.5     -0.0873455   0.0591861   -1.48    0.1400
+input_noise: 1.0     -0.0814345   0.135267    -0.60    0.5472
+input_noise: 1.5      0.23488     0.135468     1.73    0.0829
+input_noise: 2.0     -0.161693    0.080226    -2.02    0.0439
+
+CIs:
+ β2  │ -0.0054048  0.0182941
+ β3  │ -0.110009   0.0129306
+ β4  │ -0.29264    -0.167098
+ β5  │ 0.236803    0.358267
+ β6  │ -0.192531   -0.0752518
 
 # Modeling fixation location
 
@@ -305,7 +321,7 @@ m_varyingSlope_complex = let
     fit(MixedModel, varSlope, my_data; contrasts=my_cake);
   end
 
-issingular(m_varyingSlope_complex) # Not overparameterized
+issingular(m_varyingSlope_complex) # Overparameterized
 ```
 
 ### Models of reduced complexity
@@ -321,28 +337,6 @@ m_varyingSlope_complex_zc = let
 
 issingular(m_varyingSlope_complex_zc) # NOT overparameterized
 ```
-
-```{julia}
-
-gof_summary = let
-  nms = [:m_varyingSlope_complex, :m_varyingSlope_complex_zc]
-  mods = eval.(nms)
-  lrt = MixedModels.likelihoodratiotest(m_varyingSlope_complex, m_varyingSlope_complex_zc)
-  DataFrame(;
-    name = nms, 
-    dof=dof.(mods),
-    deviance=round.(deviance.(mods), digits=0),
-    AIC=round.(aic.(mods),digits=0),
-    AICc=round.(aicc.(mods),digits=0),
-    BIC=round.(bic.(mods),digits=0),
-    χ²=vcat(:., round.(lrt.tests.deviancediff, digits=0)),
-    χ²_dof=vcat(:., round.(lrt.tests.dofdiff, digits=0)),
-    pvalue=vcat(:., round.(lrt.tests.pvalues, digits=3))
-  )
-end
-
-```
-m_varyingSlope_complex_zc wins when referring to BIC (or AIC).
 
 #### Throwing out random effect terms
 
@@ -399,9 +393,9 @@ issingular(m_varyingSlope2) # NOT overparameterized
 ```{julia}
 
 gof_summary = let
-  nms = [:m_varyingSlope2, :m_varyingSlope_complex_zc]
+  nms = [:m_varyingSlope2, :m_varyingSlope1]
   mods = eval.(nms)
-  lrt = MixedModels.likelihoodratiotest(m_varyingSlope2, m_varyingSlope_complex_zc)
+  lrt = MixedModels.likelihoodratiotest(m_varyingSlope2, m_varyingSlope1)
   DataFrame(;
     name = nms, 
     dof=dof.(mods),
@@ -416,7 +410,7 @@ gof_summary = let
 end
 
 ```
-m_varyingSlope_complex_zc is favored and it was beaten by m_varyingSlope1.
+m_varyingSlope1 is favored.
 
 ## Model selection
 Finally taking a look at the main effects within the selected model:
@@ -456,6 +450,16 @@ The ridgeplot will show us the estimates and their distributions (as plotted abo
 ridgeplot(samples; show_intercept=false, xlabel="Bootstrap density and 95%CI", title="Distance to agent (close fixations)")
 ```
 
-We detect significant effects for 
-**N_visible_obstalces** (0.00277217, 0.0158914) increases Distance to Spaceship in close fixations.
-No effect for numerical **input_noise**.
+Main effects:
+N_visible_obstacles   0.0130597   0.0030702   4.25    <1e-04
+input_noise: 0.5      0.0350746   0.0156453   2.24    0.0250
+input_noise: 1.0     -0.0760162   0.01575    -4.83    <1e-05
+input_noise: 1.5      0.0978971   0.0153844   6.36    <1e-09
+input_noise: 2.0     -0.10084     0.0146067  -6.90    <1e-11
+
+CIs:
+ β2  │ 0.00673267  0.0189182
+ β3  │ 0.00399053  0.0663377
+ β4  │ -0.105465   -0.0446926
+ β5  │ 0.0666501   0.126786
+ β6  │ -0.130502   -0.0724793
