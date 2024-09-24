@@ -20,8 +20,8 @@ library(MASS)
 
 setwd('/Users/heinrich/Projects/Moonlander_iii_LMM/')
 
-close_fixations <- read_feather("data/Experiment3_CloseFixations.arrow")
-distant_fixations <- read_feather("data/Experiment3_DistantFixations.arrow")
+close_fixations <- read_feather("data/Experiment3_CloseFixations_short.arrow")
+distant_fixations <- read_feather("data/Experiment3_DistantFixations_short.arrow")
 
 # exclude fixations without duration (wrongly flagged fixations)
 close_fixations <- close_fixations[close_fixations$fixation_duration >= 0.0125, ]
