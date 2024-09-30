@@ -1,0 +1,450 @@
+---
+title: "Nils Wendel Heinrich: Sanity check"
+subtitle: "Moonlander III - Analysis"
+author: "Nils Wendel Heinrich"
+date: "2024-09-30"
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 2
+    code-fold: false
+    number-sections: true
+    fig-width: 8
+    fig-height: 6
+editor_options:
+  chunk_output_type: console
+jupyter: julia-1.9
+---
+
+## Packages
+```{julia}
+#| label: packages
+
+using Arrow
+using AlgebraOfGraphics
+using CairoMakie
+using DataFrames
+using DataFrameMacros
+using MixedModels
+using MixedModelsMakie
+using Random
+#using RCall
+
+CairoMakie.activate!(; type="svg");
+```
+
+```{julia}
+#| label: constants
+const RNG = MersenneTwister(36)
+N_iterations = 10000
+
+const AoG = AlgebraOfGraphics;
+```
+
+# Predicting prob of fixation to be distant
+
+```{julia}
+#| label: data
+
+my_data = DataFrame(Arrow.Table("data/Experiment3_AllFixations_short.arrow"))
+#my_data = DataFrame(Arrow.Table("data/Experiment1_FixationsComplete.arrow"))
+
+my_data = dropmissing(my_data, [:N_visible_obstacles, :distance_to_spaceship])
+
+# Filtering fixations with duration less than 25 samples
+# fixdur >= 0.0125
+my_data = my_data[(my_data.fixation_duration .>= 0.0125), :]  # 0.06
+
+my_data = my_data[(my_data.distance_to_spaceship .< 16.63762484977781), :]
+
+describe(my_data)
+
+```
+
+#### predicted variable with 2 outcomes
+
+```{julia}
+#| label: binary_outcome_variable
+
+dist = Bernoulli()
+
+```
+
+#### Hypothesis Coding
+
+```{julia}
+
+my_cake = Dict(
+  :ID => Grouping(),
+  :input_noise => HypothesisCoding(
+    [
+      -1 +1 0 0 0
+      0 -1 +1 0 0
+      0 0 -1 +1 0
+      0 0 0 -1 +1
+    ];
+    levels=[0.0, 0.5, 1.0, 1.5, 2.0],
+    labels=["0.5", "1.0", "1.5", "2.0"],
+  ),
+);
+
+my_cake_lin = Dict(
+  :ID => Grouping(),
+);
+
+```
+
+```{julia}
+#| label: m_varyingInt1
+
+m_varyingInt1 = let
+    formula = @formula(cluster ~ 1 + N_visible_obstacles + input_noise 
+    + (1 | ID));
+    fit(MixedModel, formula, my_data, dist; contrasts=my_cake);
+  end
+
+```
+
+```{julia}
+
+m_varyingInt1_lin = let
+    formula = @formula(cluster ~ 1 + N_visible_obstacles + input_noise 
+    + (1 | ID));
+    fit(MixedModel, formula, my_data, dist; contrasts=my_cake_lin);
+  end
+
+```
+
+```{julia}
+#| label: lik ratio test
+
+MixedModels.likelihoodratiotest(m_varyingInt1, m_varyingInt1_lin)
+
+```
+The likelihood ratio test hints towards input noise as linear covariate. We will therefore use my_cake_lin as our contrast.
+
+```{julia}
+
+VarCorr(m_varyingInt1_lin)
+
+```
+ID is a suitable random intercept effect.
+
+## Exploring random slope effects
+
+Dumping all possible covariates in the random slope effects structure.
+```{julia}
+#| label: m_varyingSlope_complex
+
+m_varyingSlope_complex = let
+    formula = @formula(cluster ~ 1 + N_visible_obstacles + input_noise 
+    + (1 + N_visible_obstacles + input_noise | ID));
+    fit(MixedModel, formula, my_data, dist; contrasts=my_cake_lin);
+  end
+
+issingular(m_varyingSlope_complex) # Overparamterized
+
+```
+That took a while, and it turned out singular...
+
+### Models of reduced complexity
+
+Stating zerocorr
+```{julia}
+#| label: m_varyingSlope_complex_zc
+
+m_varyingSlope_complex_zc = let
+    formula = @formula(cluster ~ 1 + N_visible_obstacles + input_noise 
+    + zerocorr(1 + N_visible_obstacles + input_noise | ID));
+    fit(MixedModel, formula, my_data, dist; contrasts=my_cake_lin);
+  end
+
+issingular(m_varyingSlope_complex_zc) # Not overparamterized
+
+```
+Starting from here with m_varyingSlope_complex_zc.
+
+Throwing out N_obstacles
+```{julia}
+#| label: m_varyingSlope1
+
+m_varyingSlope1 = let
+    formula = @formula(cluster ~ 1 + N_visible_obstacles + input_noise 
+    + zerocorr(1 + input_noise | ID));
+    fit(MixedModel, formula, my_data, dist; contrasts=my_cake_lin);
+  end
+
+issingular(m_varyingSlope1)
+
+```
+
+```{julia}
+
+gof_summary = let
+  nms = [:m_varyingSlope_complex_zc, :m_varyingSlope1]
+  mods = eval.(nms)
+  lrt = MixedModels.likelihoodratiotest(m_varyingSlope_complex_zc, m_varyingSlope1)
+  DataFrame(;
+    name = nms, 
+    dof=dof.(mods),
+    deviance=round.(deviance.(mods), digits=0),
+    AIC=round.(aic.(mods),digits=0),
+    AICc=round.(aicc.(mods),digits=0),
+    BIC=round.(bic.(mods),digits=0),
+    χ²=vcat(:., round.(lrt.tests.deviancediff, digits=0)),
+    χ²_dof=vcat(:., round.(lrt.tests.dofdiff, digits=0)),
+    pvalue=vcat(:., round.(lrt.tests.pvalues, digits=3))
+  )
+end
+
+```
+Referring to BIC (but not AIC), N_visible_obstacles can be neglected as random slope effect... Proceeding with m_varyingSlope1 (with BIC=24484.0).
+
+Throwing out input_noise.
+```{julia}
+#| label: m_varyingSlope2
+
+m_varyingSlope2 = let
+    formula = @formula(cluster ~ 1 + N_visible_obstacles + input_noise 
+    + zerocorr(1 + N_visible_obstacles | ID));
+    fit(MixedModel, formula, my_data, dist; contrasts=my_cake_lin);
+  end
+
+issingular(m_varyingSlope2) # NOT overparamterized
+
+```
+
+```{julia}
+
+gof_summary = let
+  nms = [:m_varyingSlope_complex_zc, :m_varyingSlope2]
+  mods = eval.(nms)
+  lrt = MixedModels.likelihoodratiotest(m_varyingSlope_complex_zc, m_varyingSlope2)
+  DataFrame(;
+    name = nms, 
+    dof=dof.(mods),
+    deviance=round.(deviance.(mods), digits=0),
+    AIC=round.(aic.(mods),digits=0),
+    AICc=round.(aicc.(mods),digits=0),
+    BIC=round.(bic.(mods),digits=0),
+    χ²=vcat(:., round.(lrt.tests.deviancediff, digits=0)),
+    χ²_dof=vcat(:., round.(lrt.tests.dofdiff, digits=0)),
+    pvalue=vcat(:., round.(lrt.tests.pvalues, digits=3))
+  )
+end
+
+```
+Slope2 features a BIC of 24482.0.
+Close but out of the two random slopes it should be N_visible_obstacles. How does m_varyingSlope2 compare to m_varyingInt1?
+
+```{julia}
+
+gof_summary = let
+  nms = [:m_varyingInt1, :m_varyingSlope2]
+  mods = eval.(nms)
+  lrt = MixedModels.likelihoodratiotest(m_varyingInt1, m_varyingSlope2)
+  DataFrame(;
+    name = nms, 
+    dof=dof.(mods),
+    deviance=round.(deviance.(mods), digits=0),
+    AIC=round.(aic.(mods),digits=0),
+    AICc=round.(aicc.(mods),digits=0),
+    BIC=round.(bic.(mods),digits=0),
+    χ²=vcat(:., round.(lrt.tests.deviancediff, digits=0)),
+    χ²_dof=vcat(:., round.(lrt.tests.dofdiff, digits=0)),
+    pvalue=vcat(:., round.(lrt.tests.pvalues, digits=3))
+  )
+end
+
+```
+m_varyingInt1 wins. We will simply refer to m_varyingInt1 for hypothesis testing.
+
+## Model selection
+```{julia}
+
+m_varyingInt1 = let
+    formula = @formula(cluster ~ 1 + N_visible_obstacles + input_noise 
+    + (1 | ID));
+    fit(MixedModel, formula, my_data, dist; contrasts=my_cake);
+  end
+
+m_varyingInt1
+```
+
+## Results
+(Intercept)           0.431679   0.346017      1.25    0.2122
+N_visible_obstacles  -0.0601526  0.00468225  -12.85    <1e-37
+input_noise: 0.5      0.0198961  0.0483955     0.41    0.6810
+input_noise: 1.0     -0.243071   0.0501184    -4.85    <1e-05
+input_noise: 1.5      0.172024   0.0490939     3.50    0.0005
+input_noise: 2.0     -0.224229   0.0474043    -4.73    <1e-05
+
+**input noise** level are compared to the one level before (1.5 vs. 1.0 and so on).
+
+
+# Predicting done (True=success vs. False=crash) with level_difficulty and input_noise
+
+```{julia}
+#| label: data
+
+my_data = DataFrame(Arrow.Table("data/Experiment3_SoCData.arrow"))
+# 1425 rows
+
+# new variable: level_difficulty based on level
+# 1 & 2: easy
+# 3 & 4: medium
+# 5 & 6: hard
+
+# convert boolean column done to int (o vs. 1)
+my_data[!,:done] = convert.(Int,my_data[!,:done])
+
+describe(my_data)
+```
+
+```{julia}
+
+my_cake = Dict(
+  :ID => Grouping(),
+  :input_noise => HypothesisCoding(
+    [
+      -1 +1 0 0 0
+      0 -1 +1 0 0
+      0 0 -1 +1 0
+      0 0 0 -1 +1
+    ];
+    levels=[0.0, 0.5, 1.0, 1.5, 2.0],
+    labels=["0.5", "1.0", "1.5", "2.0"],
+  ),
+);
+
+```
+
+The predicted varibale **done** is binary. We will therefore define an object *dist* set to the Bernoulli distribution.
+```{julia}
+#| label: binary_outcome_variable
+
+dist = Bernoulli()
+
+```
+
+## Building models
+
+```{julia}
+#| label: m_varyingInt1
+
+m_varyingInt1 = let
+    formula = @formula(done ~ 1 + level_difficulty + input_noise + (1 | ID));
+    fit(MixedModel, formula, my_data, dist; contrasts=my_cake);
+  end
+
+#issingular(m_varyingInt1) # Not overparamterized
+VarCorr(m_varyingInt1)
+#last(m_varyingInt1.λ)
+
+```
+Seems like ID is a viable random effect. Next we will explore random slope effects.
+
+### Exploring random slope effects
+```{julia}
+#| label: m_varyingSlope_complex
+
+m_varyingSlope_complex = let
+    formula = @formula(done ~ 1 + level_difficulty + input_noise + 
+    (1 + level_difficulty + input_noise | ID));
+    fit(MixedModel, formula, my_data, dist; contrasts=my_cake);
+  end
+
+issingular(m_varyingSlope_complex) # overparamterized
+
+```
+
+Going to get rid of correlations between random slopes.
+```{julia}
+#| label: m_varyingSlope_complex_zc
+
+m_varyingSlope_complex_zc = let
+    formula = @formula(done ~ 1 + level_difficulty + input_noise + 
+    zerocorr(1 + level_difficulty + input_noise | ID));
+    fit(MixedModel, formula, my_data, dist; contrasts=my_cake);
+  end
+
+issingular(m_varyingSlope_complex_zc) # overparamterized
+
+```
+Still singular.
+
+#### Starting to delete individual random slopes
+
+Deleting level_difficulty...
+```{julia}
+#| label: m_varyingSlope1
+
+m_varyingSlope1 = let
+    formula = @formula(done ~ 1 + level_difficulty + input_noise + 
+    zerocorr(1 + input_noise | ID));
+    fit(MixedModel, formula, my_data, dist; contrasts=my_cake);
+  end
+
+issingular(m_varyingSlope1) # overparamterized
+
+```
+
+Deleting input_noise instead...
+```{julia}
+#| label: m_varyingSlope2
+
+m_varyingSlope2 = let
+    formula = @formula(done ~ 1 + level_difficulty + input_noise + 
+    zerocorr(1 + level_difficulty | ID));
+    fit(MixedModel, formula, my_data, dist; contrasts=my_cake);
+  end
+
+issingular(m_varyingSlope2) # Not overparamterized
+
+```
+This one worked out. We will compare this one with the m_varyingInt1:
+
+```{julia}
+
+gof_summary = let
+  nms = [:m_varyingInt1, :m_varyingSlope2]
+  mods = eval.(nms)
+  lrt = MixedModels.likelihoodratiotest(m_varyingInt1, m_varyingSlope2)
+  DataFrame(;
+    name = nms, 
+    dof=dof.(mods),
+    deviance=round.(deviance.(mods), digits=0),
+    AIC=round.(aic.(mods),digits=0),
+    AICc=round.(aicc.(mods),digits=0),
+    BIC=round.(bic.(mods),digits=0),
+    χ²=vcat(:., round.(lrt.tests.deviancediff, digits=0)),
+    χ²_dof=vcat(:., round.(lrt.tests.dofdiff, digits=0)),
+    pvalue=vcat(:., round.(lrt.tests.pvalues, digits=3))
+  )
+end
+
+```
+m_varyingInt1 is the better fitting one. We will refer to it for hypothesis testing.
+
+## Model selection
+```{julia}
+#| label: m_varyingInt1
+
+m_varyingInt1 = let
+    formula = @formula(done ~ 1 + level_difficulty + input_noise 
+    + (1 | ID));
+    fit(MixedModel, formula, my_data, dist; contrasts=my_cake);
+  end
+
+m_varyingInt1
+
+```
+
+## Results
+(Intercept)                0.658082     0.261604   2.52    0.0119
+level_difficulty: medium   1.13201      0.323859   3.50    0.0005
+input_noise: 0.5          -0.0782768    0.66813   -0.12    0.9067
+input_noise: 1.0          -0.111016     0.642087  -0.17    0.8627
+input_noise: 1.5          -1.45774      0.533319  -2.73    0.0063
+input_noise: 2.0          -1.04982      0.381546  -2.75    0.0059

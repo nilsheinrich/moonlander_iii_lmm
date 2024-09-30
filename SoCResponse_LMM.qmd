@@ -81,9 +81,24 @@ describe(my_data)
 We will declare **ID** a grouping variable as well as define the effects coding for the discrete covariate input noise.
 
 #### Hypothesis Coding
+We will approach defining contrasts for input noise in 2 possible ways. It may either be done by hypothesis coding with each level being compared to the level before, or it may simply be linear.
 ```{julia}
 
 my_cake = Dict(
+  :ID => Grouping(),
+  :input_noise => HypothesisCoding(
+    [
+      -1 +1 0 0 0
+      0 -1 +1 0 0
+      0 0 -1 +1 0
+      0 0 0 -1 +1
+    ];
+    levels=[0.0, 0.5, 1.0, 1.5, 2.0],
+    labels=["0.5", "1.0", "1.5", "2.0"],
+  ),
+);
+
+my_cake_lin = Dict(
   :ID => Grouping(),
 );
 
@@ -93,21 +108,40 @@ my_cake = Dict(
 
 ### Only varying intercept LMM
 
-Already starting with N_consecutive_crash_success...
+We will built a model for the custom constrast and the linear one and compare them via likelihood ratio test:
 
-Varying intercepts for **ID**:
 ```{julia}
-#| label: m_varyingInt1
 
-m_varyingInt1 = let
+m_varyingInt1_hypo = let
     varInt = @formula(SoC ~ 1 + done + level_difficulty + input_noise + N_fixations + N_consecutive_crash_success 
     + (1 | ID));
     fit(MixedModel, varInt, my_data; contrasts=my_cake);
   end
 
-issingular(m_varyingInt1) # Not overparamterized
-#VarCorr(m_varyingInt1)
-#last(m_varyingInt1.λ)
+```
+
+```{julia}
+
+m_varyingInt1_lin = let
+    varInt = @formula(SoC ~ 1 + done + level_difficulty + input_noise + N_fixations + N_consecutive_crash_success 
+    + (1 | ID));
+    fit(MixedModel, varInt, my_data; contrasts=my_cake_lin);
+  end
+
+```
+
+#### Likelihood ratio test
+```{julia}
+#| label: lik ratio test
+
+MixedModels.likelihoodratiotest(m_varyingInt1_hypo, m_varyingInt1_lin)
+
+```
+There is no significant difference between the models. But the one with the input noise being defined as linear is more complex featuring 3 more parameters. We will therefore use the custom contrast from here on...
+
+```{julia}
+
+VarCorr(m_varyingInt1_hypo)
 
 ```
 The random intercept model hints towards ID being a valid random effect. Proceeding by including random slope effects.
@@ -136,11 +170,51 @@ m_varyingSlope_complex_zc = let
     fit(MixedModel, varSlope, my_data; contrasts=my_cake);
   end
 
-issingular(m_varyingSlope_complex_zc) # overparamterized
+issingular(m_varyingSlope_complex_zc) # not overparamterized
 ```
-Still detecting singularity.
+This is the most complex model we can built. Starting from here...
 
-Starting to delete single random slope effects while keeping zerocorr... Any combination does not work. What does though is any single random slope effect. We will thus build all the models with single random slopes and compare those against the only varying intercept model.
+Starting to delete single random slope effects while keeping zerocorr... 
+
+Deleting done:
+```{julia}
+#| label: m_varyingSlope1
+
+m_varyingSlope1 = let
+    varSlope = @formula(SoC ~ 1 + done + level_difficulty + input_noise + N_fixations + N_consecutive_crash_success 
+    + zerocorr(1 + level_difficulty + input_noise + N_fixations + N_consecutive_crash_success | ID));
+    fit(MixedModel, varSlope, my_data; contrasts=my_cake);
+  end
+
+issingular(m_varyingSlope1) # Overparamterized
+```
+
+Instead deleting input_noise:
+```{julia}
+#| label: m_varyingSlope2
+
+m_varyingSlope2 = let
+    varSlope = @formula(SoC ~ 1 + done + level_difficulty + input_noise + N_fixations + N_consecutive_crash_success 
+    + zerocorr(1 + done + level_difficulty + N_fixations + N_consecutive_crash_success | ID));
+    fit(MixedModel, varSlope, my_data; contrasts=my_cake);
+  end
+
+issingular(m_varyingSlope2) # Overparamterized
+```
+
+```{julia}
+#| label: m_varyingSlope3
+
+m_varyingSlope3 = let
+    varSlope = @formula(SoC ~ 1 + done + level_difficulty + input_noise + N_fixations + N_consecutive_crash_success 
+    + zerocorr(1 + done + input_noise | ID));
+    fit(MixedModel, varSlope, my_data; contrasts=my_cake);
+  end
+
+issingular(m_varyingSlope3) # Overparamterized
+```
+
+Any combination does not work. What does though is any single random slope effect. We will thus build all the models with single random slopes and compare those against the only varying intercept model.
 
 ### single random slope models
 
@@ -159,9 +233,9 @@ issingular(m_varyingSlope_zc_ncs) # NOT overparamterized
 ```{julia}
 
 gof_summary = let
-  nms = [:m_varyingInt1, :m_varyingSlope_zc_ncs]
+  nms = [:m_varyingSlope_complex_zc, :m_varyingSlope_zc_ncs]
   mods = eval.(nms)
-  lrt = MixedModels.likelihoodratiotest(m_varyingInt1, m_varyingSlope_zc_ncs)
+  lrt = MixedModels.likelihoodratiotest(m_varyingSlope_complex_zc, m_varyingSlope_zc_ncs)
   DataFrame(;
     name = nms, 
     dof=dof.(mods),
@@ -176,7 +250,7 @@ gof_summary = let
 end
 
 ```
-BIC=821.
+BIC=773.0 vs. 835.0. Staying with m_varyingSlope_complex_zc.
 
 ```{julia}
 #| label: m_varyingSlope_zc_done
@@ -193,9 +267,9 @@ issingular(m_varyingSlope_zc_done) # NOT overparamterized
 ```{julia}
 
 gof_summary = let
-  nms = [:m_varyingInt1, :m_varyingSlope_zc_done]
+  nms = [:m_varyingSlope_complex_zc, :m_varyingSlope_zc_done]
   mods = eval.(nms)
-  lrt = MixedModels.likelihoodratiotest(m_varyingInt1, m_varyingSlope_zc_done)
+  lrt = MixedModels.likelihoodratiotest(m_varyingSlope_complex_zc, m_varyingSlope_zc_done)
   DataFrame(;
     name = nms, 
     dof=dof.(mods),
@@ -210,7 +284,7 @@ gof_summary = let
 end
 
 ```
-BIC=798.
+Proceeding with m_varyingSlope_complex_zc.
 
 ```{julia}
 #| label: m_varyingSlope_zc_ld
@@ -234,30 +308,9 @@ m_varyingSlope_zc_in = let
     fit(MixedModel, varSlope, my_data; contrasts=my_cake);
   end
 
-issingular(m_varyingSlope_zc_in) # NOT overparamterized
+issingular(m_varyingSlope_zc_in) # overparamterized
 ```
-
-```{julia}
-
-gof_summary = let
-  nms = [:m_varyingInt1, :m_varyingSlope_zc_in]
-  mods = eval.(nms)
-  lrt = MixedModels.likelihoodratiotest(m_varyingInt1, m_varyingSlope_zc_in)
-  DataFrame(;
-    name = nms, 
-    dof=dof.(mods),
-    deviance=round.(deviance.(mods), digits=0),
-    AIC=round.(aic.(mods),digits=0),
-    AICc=round.(aicc.(mods),digits=0),
-    BIC=round.(bic.(mods),digits=0),
-    χ²=vcat(:., round.(lrt.tests.deviancediff, digits=0)),
-    χ²_dof=vcat(:., round.(lrt.tests.dofdiff, digits=0)),
-    pvalue=vcat(:., round.(lrt.tests.pvalues, digits=3))
-  )
-end
-
-```
-BIC=792.
+Also singular...
 
 ```{julia}
 #| label: m_varyingSlope_zc_nf
@@ -274,9 +327,9 @@ issingular(m_varyingSlope_zc_nf) # NOT overparamterized
 ```{julia}
 
 gof_summary = let
-  nms = [:m_varyingInt1, :m_varyingSlope_zc_nf]
+  nms = [:m_varyingSlope_complex_zc, :m_varyingSlope_zc_nf]
   mods = eval.(nms)
-  lrt = MixedModels.likelihoodratiotest(m_varyingInt1, m_varyingSlope_zc_nf)
+  lrt = MixedModels.likelihoodratiotest(m_varyingSlope_complex_zc, m_varyingSlope_zc_nf)
   DataFrame(;
     name = nms, 
     dof=dof.(mods),
@@ -291,25 +344,27 @@ gof_summary = let
 end
 
 ```
-BIC=813.
+Still m_varyingSlope_complex_zc is better.
 
-m_varyingSlope_zc_in has the smallest BIC. We will therefore do hypothesis testing on the basis of this model.
+m_varyingSlope_complex_zc has the smallest BIC. We will therefore do hypothesis testing on the basis of this model.
 
 ## Model selection
 ```{julia}
-#| label: m_varyingSlope_zc_in
+#| label: selected model
 
-m_varyingSlope_zc_in = let
+m_varyingSlope_complex_zc = let
     varSlope = @formula(SoC ~ 1 + done + level_difficulty + input_noise + N_fixations + N_consecutive_crash_success 
-    + zerocorr(1 + input_noise | ID));
+    + zerocorr(1 + done + level_difficulty + input_noise + N_fixations + N_consecutive_crash_success | ID));
     fit(MixedModel, varSlope, my_data; contrasts=my_cake);
   end
+
+m_varyingSlope_complex_zc
 
 ```
 
 ## Bootstrapping
 ```{julia}
-samples = parametricbootstrap(RNG, N_iterations, m_varyingSlope_zc_in)
+samples = parametricbootstrap(RNG, N_iterations, m_varyingSlope_complex_zc)
 tbl = samples.tbl
 ```
 
@@ -323,8 +378,31 @@ ridgeplot(samples; show_intercept=false, xlabel="Bootstrap density and 95%CI", t
 ```
 
 **Discussing the results:** We find significant effects for (stating 95% CIs):
-- done (1.70564, 2.33478)
-- input_noise (-1.4097, -0.325682)
+  Fixed-effects parameters:
+─────────────────────────────────────────────────────────────────────
+                                   Coef.  Std. Error      z  Pr(>|z|)
+─────────────────────────────────────────────────────────────────────
+(Intercept)                   3.94316      0.533372    7.39    <1e-12
+done                          1.73504      0.297304    5.84    <1e-08
+level_difficulty: medium     -0.0160268    0.101936   -0.16    0.8751
+input_noise: 0.5             -0.241697     0.16803    -1.44    0.1503
+input_noise: 1.0             -0.292297     0.244359   -1.20    0.2316
+input_noise: 1.5             -0.897577     0.41257    -2.18    0.0296
+input_noise: 2.0             -0.288491     0.210429   -1.37    0.1704
+N_fixations                   0.00267252   0.0027515   0.97    0.3314
+N_consecutive_crash_success  -0.0312364    0.0545581  -0.57    0.5670
+─────────────────────────────────────────────────────────────────────
+
+95% CIs:
+ β1  │ 2.9074       4.99311
+ β2  │ 1.14487      2.30549    # done
+ β3  │ -0.209124    0.180006
+ β4  │ -0.584629    0.0790631
+ β5  │ -0.752272    0.204499
+ β6  │ -1.71735     -0.109483
+ β7  │ -0.707735    0.109423
+ β8  │ -0.00311607  0.00819029
+ β9  │ -0.143506    0.0716458
 
 ### Frome these findings, we will only report done and will further include this covariate as random effect.
 
@@ -334,7 +412,17 @@ random effects coding
 
 my_cake = Dict(
   :ID => Grouping(),
-  :done => Grouping()
+  :done => Grouping(),
+  :input_noise => HypothesisCoding(
+    [
+      -1 +1 0 0 0
+      0 -1 +1 0 0
+      0 0 -1 +1 0
+      0 0 0 -1 +1
+    ];
+    levels=[0.0, 0.5, 1.0, 1.5, 2.0],
+    labels=["0.5", "1.0", "1.5", "2.0"],
+  ),
 );
 
 ```
@@ -350,8 +438,8 @@ m_varyingInt1 = let
     fit(MixedModel, varInt, my_data; contrasts=my_cake);
   end
 
-issingular(m_varyingInt1) # Not overparamterized
-#VarCorr(m_varyingInt1)
+#issingular(m_varyingInt1) # Not overparamterized
+VarCorr(m_varyingInt1)
 #last(m_varyingInt1.λ)
 
 ```
@@ -359,19 +447,35 @@ done is suitable for a random effect. Next up, exploring random slopes.
 
 ## Exploring random slope effects
 ```{julia}
-#| label: m_varyingSlope1
+#| label: m_varyingSlope_in
 
-m_varyingSlope1 = let
+m_varyingSlope_in = let
     varSlop = @formula(SoC ~ 1 + level_difficulty + input_noise + N_fixations + N_consecutive_crash_success
-    + (1 | ID)
+    + (1 + input_noise | ID)
+    + (1 + input_noise | done));
+    fit(MixedModel, varSlop, my_data; contrasts=my_cake);
+  end
+
+issingular(m_varyingSlope_in) # Overparamterized
+
+```
+...
+
+```{julia}
+#| label: m_varyingSlope_in
+
+m_varyingSlope_in = let
+    varSlop = @formula(SoC ~ 1 + level_difficulty + input_noise + N_fixations + N_consecutive_crash_success
+    + (1 + input_noise | ID)
     + (1 | done));
     fit(MixedModel, varSlop, my_data; contrasts=my_cake);
   end
 
-issingular(m_varyingSlope1) # Not overparamterized
+issingular(m_varyingSlope_in) # Overparamterized
 
 ```
-...
+Introducing random slopes doesn't work. We will stick with the random intercept only model.
+
 ## Model selection
 ```{julia}
 #| label: m_varyingInt1
@@ -382,6 +486,8 @@ m_varyingInt1 = let
     + (1 | done));
     fit(MixedModel, varInt, my_data; contrasts=my_cake);
   end
+
+m_varyingInt1
 
 ```
 
@@ -401,5 +507,26 @@ ridgeplot(samples; show_intercept=false, xlabel="Bootstrap density and 95%CI", t
 
 **Discussing the results:** We find significant effects for (stating 95% CIs):
 
-### with N_fixations:
-- input_noise (-1.05016, -0.637036)
+  Fixed-effects parameters:
+───────────────────────────────────────────────────────────────────────
+                                    Coef.   Std. Error      z  Pr(>|z|)
+───────────────────────────────────────────────────────────────────────
+(Intercept)                   4.87801      0.835042      5.84    <1e-08
+level_difficulty: medium     -0.132197     0.142055     -0.93    0.3521
+input_noise: 0.5             -0.187634     0.234644     -0.80    0.4239
+input_noise: 1.0             -0.216892     0.233442     -0.93    0.3528
+input_noise: 1.5             -0.887311     0.222914     -3.98    <1e-04
+input_noise: 2.0             -0.253154     0.193334     -1.31    0.1904
+N_fixations                   0.000568583  0.000859205   0.66    0.5081
+N_consecutive_crash_success   0.00354867   0.02399       0.15    0.8824
+───────────────────────────────────────────────────────────────────────
+
+95% CIs:
+ β1  │ 3.20519      6.50032
+ β2  │ -0.417877    0.144874
+ β3  │ -0.659938    0.26042
+ β4  │ -0.676055    0.232458
+ β5  │ -1.33324     -0.44727
+ β6  │ -0.630719    0.121145
+ β7  │ -0.00114322  0.0022469
+ β8  │ -0.0416936   0.0517704
