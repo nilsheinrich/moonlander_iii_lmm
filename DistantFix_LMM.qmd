@@ -430,10 +430,10 @@ m_varyingInt1 = let
     fit(MixedModel, formula, my_data; contrasts=my_cake);
   end
 
-issingular(m_varyingInt1) # NOT overparameterized
+VarCorr(m_varyingInt1)
 
 ```
-Both can be kept as random intercepts.
+We neglect ID as random intercept effect, but keep N_visible_obstacles.
 
 ## Building various models with varying slope
 
@@ -473,7 +473,7 @@ Referring to m_varyingInt1 for hypothesis testing:
 #| label: selected model
 
 m_varyingInt1 = let
-    formula = @formula(log(Dist_to_closest_obstacles) ~ 1 + input_noise 
+    formula = @formula(log(Dist_to_closest_obstacles) ~ 1 + input_noise
     + (1 | ID) 
     + (1 | N_visible_obstacles));
     fit(MixedModel, formula, my_data; contrasts=my_cake);
