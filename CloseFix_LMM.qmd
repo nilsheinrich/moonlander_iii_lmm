@@ -204,27 +204,26 @@ gof_summary = let
 end
 
 ```
-Referring to BIC, _complex_zc is ahead. We will therefore continue with hypothesis testing using m_varyingSlope1 because it beat _complex_zc.
+Referring to BIC, varyingSlope2 is ahead ever so slightly (1 point in BIC).
 
 ### Model selection
-Finally taking a look at the main effects within m_varyingSlope1:
+Finally taking a look at the main effects within the final model:
 ```{julia}
-#| label: m_varyingSlope1
+#| label: selected model
 
-m_varyingSlope_complex_zc = let
-    varSlop = @formula(log(fixation_duration) ~ 1 + N_visible_obstacles + input_noise 
-    + zerocorr(1 + N_visible_obstacles + input_noise | ID));
+m_varyingSlope2 = let
+    varSlop = @formula(log(fixation_duration) ~ 1 + N_visible_obstacles + input_noise + zerocorr(1 + input_noise | ID));
     fit(MixedModel, varSlop, my_data; contrasts=my_cake);
   end
 
-m_varyingSlope_complex_zc
+m_varyingSlope2
 
 ```
 
 Due to zerocorr, no valuable information (but for the sake of completion):
 ```{julia}
 
-MixedModels.PCA(m_varyingSlope1)
+MixedModels.PCA(m_varyingSlope2)
 
 ```
 
@@ -234,7 +233,7 @@ We can visually verify having stated zero correlation between random effects.
 #| fig-cap1: Prediction intervals on subject random effects for model m_varyingSlope_complex
 #| label: fig-cm_varyingSlope
 #|
-cm_varyingSlope = first(ranefinfo(m_varyingSlope1));
+cm_varyingSlope = first(ranefinfo(m_varyingSlope2));
 caterpillar!(Figure(; resolution=(800, 1200)), cm_varyingSlope; orderby=1)
 ```
 
@@ -245,29 +244,19 @@ caterpillar!(Figure(; resolution=(800, 1200)), cm_varyingSlope; orderby=1)
 #| label: fig-shrinkage
 #|
 #| fig-cap: Shrinkage plots of the subject random effects in the chosen model
-shrinkageplot!(Figure(; resolution=(1000, 1200)), m_varyingSlope1)
+shrinkageplot!(Figure(; resolution=(1000, 1200)), m_varyingSlope2)
 
 ```
-We see a few data points which are aggressively adjusted, especially for input noise W and S. Here is where strength was borrowed from somewhere else and applied to adjust the linear trends of these individual data points.
+We see a few data points which are aggressively adjusted. Here is where strength was borrowed from somewhere else and applied to adjust the linear trends of these individual data points.
 
 ## Bootstrapping
 
 ```{julia}
-samples = parametricbootstrap(RNG, N_iterations, m_varyingSlope1)
+samples = parametricbootstrap(RNG, N_iterations, m_varyingSlope2)
 tbl = samples.tbl
 ```
 
 ### Plotting
-Taking a look at the distributions of the estimates for the main effects:
-
-initial glimpse, leaving out intercept...
-```{julia}
-plt = data(tbl) * mapping(
-  [:β2, :β3, :β4, :β5, :β6] .=> "Bootstrap replicates of main effect estimates";
-  color=dims(1) => renamer([ "N_obstacles", "N_drift", "input_noiseW", "input_noiseS", "N_obstacles * N_drift"])
-  ) * AoG.density()
-draw(plt; figure=(;supertitle="Parametric bootstrap β estimates of variance components"))
-```
 
 Let's first take a look into the bounds
 ```{julia}
@@ -280,18 +269,23 @@ ridgeplot(samples; show_intercept=false, xlabel="Bootstrap density and 95%CI", t
 ```
 
 Main effects:
-N_visible_obstacles   0.00665102  0.00579172   1.15    0.2508
-input_noise: 0.5     -0.0873455   0.0591861   -1.48    0.1400
-input_noise: 1.0     -0.0814345   0.135267    -0.60    0.5472
-input_noise: 1.5      0.23488     0.135468     1.73    0.0829
-input_noise: 2.0     -0.161693    0.080226    -2.02    0.0439
+─────────────────────────────────────────────────────────────
+                           Coef.  Std. Error      z  Pr(>|z|)
+─────────────────────────────────────────────────────────────
+(Intercept)          -1.70293     0.411105    -4.14    <1e-04
+N_visible_obstacles   0.00343872  0.00281963   1.22    0.2226
+input_noise: 0.5     -0.0864906   0.0604432   -1.43    0.1524
+input_noise: 1.0     -0.0792858   0.135079    -0.59    0.5572
+input_noise: 1.5      0.236991    0.135751     1.75    0.0808
+input_noise: 2.0     -0.163307    0.0804964   -2.03    0.0425
+─────────────────────────────────────────────────────────────
 
 CIs:
- β2  │ -0.0054048  0.0182941
- β3  │ -0.110009   0.0129306
- β4  │ -0.29264    -0.167098
- β5  │ 0.236803    0.358267
- β6  │ -0.192531   -0.0752518
+ β2  │ -0.00212557  0.00896377
+ β3  │ -0.208267    0.0305545
+ β4  │ -0.346461    0.185952
+ β5  │ -0.0404047   0.492531
+ β6  │ -0.318524    -0.0021715
 
 # Modeling fixation location
 
