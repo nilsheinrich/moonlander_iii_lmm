@@ -263,7 +263,7 @@ input_noise: 2.0     -0.0577857   0.0288805   -2.00    0.0454
 
 **N_visible_obstacles** increases fixation duration in distant fixations (0.0231585, 0.00549571, [0.0115756, 0.0336489], p<.001).
 
-sole effect for **input noise: 2.0 (compared to 1.5)** (-0.0577857, 0.0.0288805, [0.0196893, 0.0529595], p=.046)
+Effect for **input noise: 2.0 (compared to 1.5)** (-0.0577857, 0.0.0288805, [0.0196893, 0.0529595], p=.046)
 
 # Modeling fixation location - distance to spaceship
 
