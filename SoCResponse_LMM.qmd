@@ -47,6 +47,7 @@ using DataFrameMacros
 using MixedModels
 using MixedModelsMakie
 using Random
+using CategoricalArrays
 #using RCall
 
 CairoMakie.activate!(; type="svg");
@@ -67,11 +68,7 @@ One possible random effect: **ID** (the subject itself).
 
 my_data = DataFrame(Arrow.Table("data/Experiment3_SoCData.arrow"))
 
-# new variable: level_difficulty based on level
-# 1 & 2: easy
-# 3 & 4: medium
-# 5 & 6: hard
-
+my_data.level_difficulty = CategoricalArray(my_data.level_difficulty)
 
 describe(my_data)
 ```
@@ -79,6 +76,13 @@ describe(my_data)
 ### Contrasts
 
 We will declare **ID** a grouping variable as well as define the effects coding for the discrete covariate input noise.
+
+Reordering level_difficulty first:
+```{julia}
+
+levels!(my_data.level_difficulty, ["medium", "hard"])
+
+```
 
 #### Hypothesis Coding
 We will approach defining contrasts for input noise in 2 possible ways. It may either be done by hypothesis coding with each level being compared to the level before, or it may simply be linear.
@@ -382,15 +386,15 @@ ridgeplot(samples; show_intercept=false, xlabel="Bootstrap density and 95%CI", t
 ─────────────────────────────────────────────────────────────────────
                                    Coef.  Std. Error      z  Pr(>|z|)
 ─────────────────────────────────────────────────────────────────────
-(Intercept)                   3.94316      0.533372    7.39    <1e-12
-done                          1.73504      0.297304    5.84    <1e-08
-level_difficulty: medium     -0.0160268    0.101936   -0.16    0.8751
-input_noise: 0.5             -0.241697     0.16803    -1.44    0.1503
-input_noise: 1.0             -0.292297     0.244359   -1.20    0.2316
-input_noise: 1.5             -0.897577     0.41257    -2.18    0.0296
-input_noise: 2.0             -0.288491     0.210429   -1.37    0.1704
-N_fixations                   0.00267252   0.0027515   0.97    0.3314
-N_consecutive_crash_success  -0.0312364    0.0545581  -0.57    0.5670
+(Intercept)                   3.92703     0.538427     7.29    <1e-12
+done                          1.73504     0.297297     5.84    <1e-08
+level_difficulty: hard        0.0160102   0.101881     0.16    0.8751
+input_noise: 0.5             -0.241732    0.168016    -1.44    0.1502
+input_noise: 1.0             -0.292277    0.243987    -1.20    0.2309
+input_noise: 1.5             -0.89754     0.413319    -2.17    0.0299
+input_noise: 2.0             -0.288504    0.210473    -1.37    0.1705
+N_fixations                   0.00267314  0.00275211   0.97    0.3314
+N_consecutive_crash_success  -0.031236    0.0545655   -0.57    0.5670
 ─────────────────────────────────────────────────────────────────────
 
 95% CIs:
@@ -511,8 +515,8 @@ ridgeplot(samples; show_intercept=false, xlabel="Bootstrap density and 95%CI", t
 ───────────────────────────────────────────────────────────────────────
                                     Coef.   Std. Error      z  Pr(>|z|)
 ───────────────────────────────────────────────────────────────────────
-(Intercept)                   4.87801      0.835042      5.84    <1e-08
-level_difficulty: medium     -0.132197     0.142055     -0.93    0.3521
+(Intercept)                   4.74581      0.836791      5.67    <1e-07
+level_difficulty: hard        0.132197     0.142055      0.93    0.3521
 input_noise: 0.5             -0.187634     0.234644     -0.80    0.4239
 input_noise: 1.0             -0.216892     0.233442     -0.93    0.3528
 input_noise: 1.5             -0.887311     0.222914     -3.98    <1e-04
@@ -522,11 +526,11 @@ N_consecutive_crash_success   0.00354867   0.02399       0.15    0.8824
 ───────────────────────────────────────────────────────────────────────
 
 95% CIs:
- β1  │ 3.20519      6.50032
- β2  │ -0.417877    0.144874
- β3  │ -0.659938    0.26042
- β4  │ -0.676055    0.232458
- β5  │ -1.33324     -0.44727
- β6  │ -0.630719    0.121145
- β7  │ -0.00114322  0.0022469
- β8  │ -0.0416936   0.0517704
+β1  │ 3.08438      6.36467
+β2  │ -0.14795     0.408386
+β3  │ -0.624235    0.286178
+β4  │ -0.661743    0.249646
+β5  │ -1.32736     -0.449999
+β6  │ -0.63926     0.111636
+β7  │ -0.00120775  0.00223061
+β8  │ -0.0464392   0.0477839
