@@ -29,6 +29,7 @@ using DataFrameMacros
 using MixedModels
 using MixedModelsMakie
 using Random
+using CategoricalArrays
 #using RCall
 
 CairoMakie.activate!(; type="svg");
@@ -74,6 +75,12 @@ dist = Bernoulli()
 #### Hypothesis Coding
 
 ```{julia}
+
+level_difficulty_col = categorical(my_data.level_difficulty)
+
+levels!(level_difficulty_col, ["medium", "hard"])
+
+my_data.level_difficulty = level_difficulty_col
 
 my_cake = Dict(
   :ID => Grouping(),
@@ -304,6 +311,12 @@ describe(my_data)
 
 ```{julia}
 
+level_difficulty_col = categorical(my_data.level_difficulty)
+
+levels!(level_difficulty_col, ["medium", "hard"])
+
+my_data.level_difficulty = level_difficulty_col
+
 my_cake = Dict(
   :ID => Grouping(),
   :input_noise => HypothesisCoding(
@@ -442,9 +455,14 @@ m_varyingInt1
 ```
 
 ## Results
-(Intercept)                0.658082     0.261604   2.52    0.0119
-level_difficulty: medium   1.13201      0.323859   3.50    0.0005
-input_noise: 0.5          -0.0782768    0.66813   -0.12    0.9067
-input_noise: 1.0          -0.111016     0.642087  -0.17    0.8627
-input_noise: 1.5          -1.45774      0.533319  -2.73    0.0063
-input_noise: 2.0          -1.04982      0.381546  -2.75    0.0059
+Fixed-effects parameters:
+───────────────────────────────────────────────────────────────
+                             Coef.  Std. Error      z  Pr(>|z|)
+───────────────────────────────────────────────────────────────
+(Intercept)              1.78991      0.320139   5.59    <1e-07
+level_difficulty: hard  -1.1318       0.323849  -3.49    0.0005
+input_noise: 0.5        -0.0782834    0.668143  -0.12    0.9067
+input_noise: 1.0        -0.111414     0.642057  -0.17    0.8622
+input_noise: 1.5        -1.45741      0.533273  -2.73    0.0063
+input_noise: 2.0        -1.04975      0.381541  -2.75    0.0059
+───────────────────────────────────────────────────────────────
