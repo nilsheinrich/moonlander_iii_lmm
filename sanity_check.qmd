@@ -76,12 +76,6 @@ dist = Bernoulli()
 
 ```{julia}
 
-level_difficulty_col = categorical(my_data.level_difficulty)
-
-levels!(level_difficulty_col, ["medium", "hard"])
-
-my_data.level_difficulty = level_difficulty_col
-
 my_cake = Dict(
   :ID => Grouping(),
   :input_noise => HypothesisCoding(
