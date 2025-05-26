@@ -174,18 +174,40 @@ issingular(m_varyingSlope2)  # Not overparameterized
 
 ```
 This one is singular again.
-We will refer to m_varyingSlope1 for hypothesis testing.
+
+```{julia}
+
+gof_summary = let
+  nms = [:m_varyingInt1, :m_varyingSlope1]
+  mods = eval.(nms)
+  lrt = MixedModels.likelihoodratiotest(m_varyingInt1, m_varyingSlope1)
+  DataFrame(;
+    name = nms, 
+    dof=dof.(mods),
+    deviance=round.(deviance.(mods), digits=0),
+    AIC=round.(aic.(mods),digits=0),
+    AICc=round.(aicc.(mods),digits=0),
+    BIC=round.(bic.(mods),digits=0),
+    χ²=vcat(:., round.(lrt.tests.deviancediff, digits=0)),
+    χ²_dof=vcat(:., round.(lrt.tests.dofdiff, digits=0)),
+    pvalue=vcat(:., round.(lrt.tests.pvalues, digits=3))
+  )
+end
+
+```
+We will refer to m_varyingInt1 for hypothesis testing as it features a slightly smaller BIC.
 
 ## Model selection
 ```{julia}
 #| label: selected model
 
-m_varyingSlope1 = let
-    formula = @formula(log(fixation_duration) ~ 1 + N_visible_obstacles + input_noise + zerocorr(1 + N_visible_obstacles | ID));
+m_varyingInt1 = let
+    formula = @formula(log(fixation_duration) ~ 1 + N_visible_obstacles + input_noise 
+    + (1 | ID));
     fit(MixedModel, formula, my_data; contrasts=my_cake);
   end
 
-m_varyingSlope1
+m_varyingInt1
 
 ```
 
@@ -193,7 +215,7 @@ m_varyingSlope1
 
 ```{julia}
 
-MixedModels.PCA(m_varyingSlope1)
+MixedModels.PCA(m_varyingInt1)
 
 ```
 
@@ -203,11 +225,11 @@ In the output, we will look at the normalized cumulative variances (second table
 
 We can visually check for having no correlation between random effects with a caterpillar plot.
 ```{julia}
-#| fig-cap1: Prediction intervals on subject random effects for model m_varyingSlope
-#| label: fig-cm_varyingSlope
+#| fig-cap1: Prediction intervals on subject random effects for model m_varyingInt
+#| label: fig-cm_varyingInt
 #|
-cm_varyingSlope = first(ranefinfo(m_varyingSlope1));
-caterpillar!(Figure(; resolution=(800, 1200)), cm_varyingSlope; orderby=1)
+cm_varyingInt = first(ranefinfo(m_varyingInt1));
+caterpillar!(Figure(; resolution=(800, 1200)), cm_varyingInt; orderby=1)
 ```
 
 ## Shrinkage plot
@@ -217,14 +239,14 @@ This plot shows where strength was borrowed and applied to the data (in terms of
 #| label: fig-shrinkage
 #|
 #| fig-cap: Shrinkage plots of the subject random effects in the chosen model
-shrinkageplot!(Figure(; resolution=(1000, 1200)), m_varyingSlope1)
+#shrinkageplot!(Figure(; resolution=(1000, 1200)), m_varyingSlope1)
 
 ```
 
 ## Bootstrapping
 
 ```{julia}
-samples = parametricbootstrap(RNG, N_iterations, m_varyingSlope1)
+samples = parametricbootstrap(RNG, N_iterations, m_varyingInt1)
 tbl = samples.tbl
 ```
 "Confidence intervals are obtained using a parametric bootstrap with N replicates."
@@ -245,25 +267,24 @@ ridgeplot(samples; show_intercept=false, xlabel="Bootstrap density and 95%CI", t
 ─────────────────────────────────────────────────────────────
                            Coef.  Std. Error      z  Pr(>|z|)
 ─────────────────────────────────────────────────────────────
-(Intercept)          -1.92776     0.4502      -4.28    <1e-04
-N_visible_obstacles   0.0231585   0.00549571   4.21    <1e-04
-input_noise: 0.5      0.0379117   0.0284585    1.33    0.1828
-input_noise: 1.0      0.00869188  0.0300279    0.29    0.7722
-input_noise: 1.5      0.0507084   0.0294154    1.72    0.0847
-input_noise: 2.0     -0.0577857   0.0288805   -2.00    0.0454
+(Intercept)          -1.94129     0.431296    -4.50    <1e-05
+N_visible_obstacles   0.0251438   0.00290809   8.65    <1e-17
+input_noise: 0.5      0.0447076   0.0283517    1.58    0.1148
+input_noise: 1.0      0.00625462  0.0300117    0.21    0.8349
+input_noise: 1.5      0.046539    0.0294153    1.58    0.1136
+input_noise: 2.0     -0.0534997   0.0288743   -1.85    0.0639
 ─────────────────────────────────────────────────────────────
 
 95% CIs:
-β1  │ -2.82969     -1.07788
-β2  │ 0.0132275    0.0351169
-β3  │ -0.0176705   0.0947447
-β4  │ -0.0490953   0.0686811
-β5  │ -0.00467751  0.111232
-β6  │ -0.115267    -0.00187989
+β1  │ -2.77218    -1.07276
+β2  │ 0.0195991   0.0307794
+β3  │ -0.0106746  0.100982
+β4  │ -0.0564663  0.0617446
+β5  │ -0.0116303  0.103128
+β6  │ -0.10848    0.00425392
 
-**N_visible_obstacles** increases fixation duration in distant fixations (0.0231585, 0.00549571, [0.0115756, 0.0336489], p<.001).
+**N_visible_obstacles** increases fixation duration in distant fixations (0.0251438, 0.00290809, [0.0195991, 0.0307794], p<.001).
 
-Effect for **input noise: 2.0 (compared to 1.5)** (-0.0577857, 0.0.0288805, [0.0196893, 0.0529595], p=.046)
 
 # Modeling fixation location - distance to spaceship
 
@@ -341,17 +362,40 @@ issingular(m_varyingSlope2)
 ```
 singular again.
 
+Testing models
+```{julia}
+
+gof_summary = let
+  nms = [:m_varyingInt1, :m_varyingSlope1]
+  mods = eval.(nms)
+  lrt = MixedModels.likelihoodratiotest(m_varyingInt1, m_varyingSlope1)
+  DataFrame(;
+    name = nms, 
+    dof=dof.(mods),
+    deviance=round.(deviance.(mods), digits=0),
+    AIC=round.(aic.(mods),digits=0),
+    AICc=round.(aicc.(mods),digits=0),
+    BIC=round.(bic.(mods),digits=0),
+    χ²=vcat(:., round.(lrt.tests.deviancediff, digits=0)),
+    χ²_dof=vcat(:., round.(lrt.tests.dofdiff, digits=0)),
+    pvalue=vcat(:., round.(lrt.tests.pvalues, digits=3))
+  )
+end
+
+```
+We will refer to m_varyingInt1 for hypothesis testing.
+
 ## Model selection
 ```{julia}
 #| label: selected model
 
-m_varyingSlope1 = let
+m_varyingInt1 = let
     formula = @formula(1/sqrt(distance_to_spaceship) ~ 1 + N_visible_obstacles + input_noise 
-    + zerocorr(1 + N_visible_obstacles | ID));
+    + (1 | ID));
     fit(MixedModel, formula, my_data; contrasts=my_cake);
   end
 
-m_varyingSlope1
+m_varyingInt1
 
 ```
 Now we can actually take a closer look at the main effects.
@@ -363,8 +407,8 @@ We can confirm the correlation between random effects visually by looking at the
 #| fig-cap1: Prediction intervals on subject random effects for model m_varyingSlope
 #| label: fig-cm_varyingSlope
 #|
-cm_varyingSlope = first(ranefinfo(m_varyingSlope1));
-caterpillar!(Figure(; resolution=(800, 1200)), cm_varyingSlope; orderby=1)
+cm_varyingInt = first(ranefinfo(m_varyingInt1));
+caterpillar!(Figure(; resolution=(800, 1200)), cm_varyingInt; orderby=1)
 ```
 
 ## Shrinkage plot
@@ -374,14 +418,14 @@ caterpillar!(Figure(; resolution=(800, 1200)), cm_varyingSlope; orderby=1)
 #| label: fig-shrinkage
 #|
 #| fig-cap: Shrinkage plots of the subject random effects in the chosen model
-shrinkageplot!(Figure(; resolution=(1000, 1200)), m_varyingSlope1)
+#shrinkageplot!(Figure(; resolution=(1000, 1200)), m_varyingSlope1)
 
 ```
 
 ## Bootstrapping
 
 ```{julia}
-samples = parametricbootstrap(RNG, N_iterations, m_varyingSlope1)
+samples = parametricbootstrap(RNG, N_iterations, m_varyingInt1)
 tbl = samples.tbl
 ```
 "Confidence intervals are obtained using a parametric bootstrap with N replicates."
@@ -401,23 +445,24 @@ ridgeplot(samples; show_intercept=false, xlabel="Bootstrap density and 95%CI", t
 
 
   Fixed-effects parameters:
-───────────────────────────────────────────────────────────────
-                           Coef.   Std. Error       z  Pr(>|z|)
-───────────────────────────────────────────────────────────────
-(Intercept)           0.350053    0.00279938   125.05    <1e-99
-N_visible_obstacles   0.00102089  0.000151933    6.72    <1e-10
-input_noise: 0.5     -0.00244875  0.00102922    -2.38    0.0173
-input_noise: 1.0     -0.00375423  0.00108734    -3.45    0.0006
-input_noise: 1.5      0.00363665  0.00106518     3.41    0.0006
-input_noise: 2.0      0.00100942  0.0010456      0.97    0.3343
-───────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────
+                            Coef.   Std. Error       z  Pr(>|z|)
+────────────────────────────────────────────────────────────────
+(Intercept)           0.350244     0.0031555    110.99    <1e-99
+N_visible_obstacles   0.000983074  0.000105281    9.34    <1e-20
+input_noise: 0.5     -0.00238919   0.00102644    -2.33    0.0199
+input_noise: 1.0     -0.00376153   0.00108656    -3.46    0.0005
+input_noise: 1.5      0.00357887   0.00106488     3.36    0.0008
+input_noise: 2.0      0.00104545   0.00104522     1.00    0.3172
+────────────────────────────────────────────────────────────────
 
-CI: omitting N_visible_obstacles
- β2  │ 0.000726263  0.00132823
- β3  │ -0.00448165  -0.000469578
- β4  │ -0.00590254  -0.00163952
- β5  │ 0.00164554   0.0057857
- β6  │ -0.00104582  0.00303403
+CI:
+ β2  │ 0.000775249  0.00118684
+ β3  │ -0.00437983  -0.0003907
+ β4  │ -0.00585791  -0.00161187
+ β5  │ 0.00149832   0.00565273
+ β6  │ -0.00093964  0.00316557
+
 
 # Modeling fixation location - distance to closest obstacle
 Controlling for the number of visible obstacles.
