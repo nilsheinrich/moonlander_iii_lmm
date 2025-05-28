@@ -39,6 +39,7 @@ ml3fix.clust <- data_fixations[c("distance_to_spaceship",
                                  "input_noise",
                           	     "ID",
                           	     "level",
+                                 "trial",
                                  "distant_fixation")] %>% na.omit()
 
 # distant_fixation is =1, when the spaceship is further away than 5°. =0 otherwise.
